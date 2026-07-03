@@ -1,0 +1,76 @@
+name: Generate Free Android APK and iOS IPA
+on:
+  workflow_dispatch:
+
+jobs:
+  compile-binaries:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Install Runtime Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Global CLI Components
+        run: |
+          npm install
+          npm install -g eas-cli
+
+      # ---------------------------------------------
+      # 1. ANDROID COMPILE SEQUENCE
+      # ---------------------------------------------
+      - name: Configure Java Development Kit
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Compile Native Android Code
+        run: |
+          npx expo prebuild --platform android
+          cd android && ./gradlew assembleRelease
+
+      - name: Archive Android Production APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: smart-app-android-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+
+      # ---------------------------------------------
+      # 2. iOS COMPILE SEQUENCE
+      # ---------------------------------------------
+      - name: Generate Native iOS Structures
+        run: npx expo prebuild --platform ios
+
+      - name: Export Unsigned iOS Xcode Archive
+        run: |
+          WORKSPACE_PATH=$(ls -d ios/*.xcworkspace | head -n 1)
+          SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
+          mkdir -p build
+          xcodebuild -workspace "$WORKSPACE_PATH" \
+                     -scheme "$SCHEME_NAME" \
+                     -configuration Release \
+                     -sdk iphoneos \
+                     CODE_SIGNING_ALLOWED=NO \
+                     CODE_SIGNING_REQUIRED=NO \
+                     clean archive -archivePath build/smartapp.xcarchive
+
+      - name: Package Unsigned App into IPA Container
+        run: |
+          WORKSPACE_PATH=$(ls -d ios/*.xcworkspace | head -n 1)
+          SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
+          mkdir -p build/Payload
+          cp -r build/smartapp.xcarchive/Products/Applications/"$SCHEME_NAME".app build/Payload/
+          cd build && zip -r smart-app.ipa Payload/
+
+      - name: Archive iOS Production IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: smart-app-ios-ipa
+          path: build/smart-app.ipa
+
+          
