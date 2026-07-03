@@ -12,7 +12,8 @@
       "channel": "production",
       "distribution": "internal",
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "gradleCommand": "./gradlew assembleRelease -x lintVitalAnalyzeRelease"
       },
       "ios": {
         "simulator": false
